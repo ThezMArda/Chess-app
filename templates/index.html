@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Chess Engine</title>
+    <!-- Chessboard.js CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #1e1e24;
+            color: #f0f0f0;
+            padding: 20px;
+        }
+        #board-container {
+            width: 440px;
+            margin: 15px auto;
+        }
+        .status-box {
+            background: #2b2b36;
+            padding: 12px 24px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+            font-size: 1.1rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .eval-badge {
+            display: inline-block;
+            margin-top: 8px;
+            font-weight: bold;
+            color: #4cd137;
+        }
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            background: #00a8ff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #0097e6;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>RL Satranç Motoru (Policy-Value Net)</h2>
+    <div id="board-container">
+        <div id="board" style="width: 100%"></div>
+    </div>
+
+    <div class="status-box">
+        <div id="status">Sıra sizde (Beyaz)</div>
+        <div class="eval-badge" id="eval">Pozisyon Değeri: 0.00</div>
+    </div>
+
+    <button onclick="restartGame()">Yeni Oyun</button>
+
+    <!-- JS Bağımlılıkları -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+
+    <script>
+        var board = null;
+        var game = new Chess();
+        var $status = $('#status');
+        var $eval = $('#eval');
+
+        function onDragStart (source, piece, position, orientation) {
+            if (game.game_over()) return false;
+            // Sadece beyaz taşların oynanmasına izin ver
+            if (piece.search(/^b/) !== -1) return false;
+        }
+
+        function onDrop (source, target) {
+            // Hamle kurallara uygun mu?
+            var move = game.move({
+                from: source,
+                to: target,
+                promotion: 'q'
+            });
+
+            if (move === null) return 'snapback';
+
+            updateStatus();
+            // Yapay zekanın hamlesini sunucudan iste
+            setTimeout(getAIMove, 250);
+        }
+
+        function onSnapEnd () {
+            board.position(game.fen());
+        }
+
+        function getAIMove() {
+            if (game.game_over()) return;
+
+            $status.html("Yapay zeka düşünüyor...");
+
+            $.ajax({
+                url: '/make_move',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ fen: game.fen() }),
+                success: function(response) {
+                    if (response.ai_move) {
+                        game.load(response.fen);
+                        board.position(game.fen());
+                        $eval.html("Pozisyon Değeri: " + response.evaluation);
+                    }
+                    updateStatus();
+                }
+            });
+        }
+
+        function updateStatus () {
+            var status = '';
+            var moveColor = game.turn() === 'b' ? 'Siyah (AI)' : 'Beyaz (Siz)';
+
+            if (game.in_checkmate()) {
+                status = 'Oyun Bitti: ' + moveColor + ' mat oldu!';
+            } else if (game.in_draw()) {
+                status = 'Oyun Bitti: Beraberlik!';
+            } else {
+                status = 'Sıra: ' + moveColor;
+                if (game.in_check()) {
+                    status += ' (Şah çekildi!)';
+                }
+            }
+            $status.html(status);
+        }
+
+        function restartGame() {
+            game.reset();
+            board.start();
+            $eval.html("Pozisyon Değeri: 0.00");
+            updateStatus();
+        }
+
+        var config = {
+            draggable: true,
+            position: 'start',
+            onDragStart: onDragStart,
+            onDrop: onDrop,
+            onSnapEnd: onSnapEnd,
+            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+        };
+        board = Chessboard('board', config);
+        updateStatus();
+    </script>
+</body>
+</html>
