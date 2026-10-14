@@ -1,159 +1,1332 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <title>AI Chess Engine</title>
-    <!-- Chessboard.js CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
-    <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background: #1e1e24;
-            color: #f0f0f0;
-            padding: 20px;
-        }
-        #board-container {
-            width: 440px;
-            margin: 15px auto;
-        }
-        .status-box {
-            background: #2b2b36;
-            padding: 12px 24px;
-            border-radius: 8px;
-            margin-top: 15px;
-            text-align: center;
-            font-size: 1.1rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-        }
-        .eval-badge {
-            display: inline-block;
-            margin-top: 8px;
-            font-weight: bold;
-            color: #4cd137;
-        }
-        button {
-            margin-top: 15px;
-            padding: 10px 20px;
-            background: #00a8ff;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-        button:hover {
-            background: #0097e6;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nexus Chess AI - Usta Düzey Web Satranç Motoru</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <!-- Chess.js library for fast rule validation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Satranç Tahtası Izgarası */
+    .chess-grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      grid-template-rows: repeat(8, 1fr);
+      aspect-ratio: 1 / 1;
+    }
+    .sq-light {
+      background-color: #e2e8f0;
+      color: #64748b;
+    }
+    .sq-dark {
+      background-color: #475569;
+      color: #94a3b8;
+    }
+    .sq-selected {
+      background-color: #facc15 !important;
+    }
+    .sq-last-move {
+      background-color: #cbd5e1 !important;
+    }
+    .sq-dark.sq-last-move {
+      background-color: #334155 !important;
+    }
+    .sq-check {
+      background-color: #ef4444 !important;
+      animation: checkPulse 1.2s infinite alternate;
+    }
+    @keyframes checkPulse {
+      0% { box-shadow: inset 0 0 10px 4px rgba(239, 68, 68, 0.9); }
+      100% { box-shadow: inset 0 0 20px 8px rgba(220, 38, 38, 1); }
+    }
+    /* Hamle Noktaları */
+    .move-hint-dot {
+      width: 26%;
+      height: 26%;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.35);
+      pointer-events: none;
+    }
+    .capture-hint-ring {
+      width: 84%;
+      height: 84%;
+      border-radius: 50%;
+      border: 4px solid rgba(239, 68, 68, 0.65);
+      pointer-events: none;
+    }
+    /* Taş stilleri */
+    .chess-piece {
+      width: 88%;
+      height: 88%;
+      cursor: grab;
+      touch-action: none;
+      transition: transform 0.12s ease;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.35));
+    }
+    .chess-piece:active {
+      cursor: grabbing;
+      transform: scale(1.15);
+      z-index: 40;
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
 </head>
-<body>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
 
-    <h2>RL Satranç Motoru (Policy-Value Net)</h2>
-    <div id="board-container">
-        <div id="board" style="width: 100%"></div>
+  <!-- Üst Bar (Navbar) -->
+  <header class="border-b border-slate-800/80 bg-slate-900/95 backdrop-blur px-3 sm:px-6 py-2.5 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex items-center justify-between gap-2">
+      <!-- Logo & Başlık -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 via-rose-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+          <i class="fa-solid fa-chess-knight text-xl text-white"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-extrabold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+              Nexus Chess AI
+            </h1>
+            <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">Pro Engine</span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">Alpha-Beta Minimax &bull; Sakinlik Araması (Quiescence) &bull; Konum Tabloları</p>
+        </div>
+      </div>
+
+      <!-- Üst Kontroller -->
+      <div class="flex items-center space-x-2">
+        <!-- Backend / Frontend Motor Seçici -->
+        <button id="engineSourceBtn" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition-all" title="Motor Modu: Tarayıcı İçi (JS) ya da Yerel Flask (T490)">
+          <i class="fa-solid fa-microchip text-indigo-400"></i>
+          <span id="engineSourceLabel" class="hidden sm:inline">Tarayıcı Motoru</span>
+        </button>
+
+        <!-- Ses Aç/Kapat -->
+        <button id="soundToggleBtn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors" title="Ses Aç/Kapat">
+          <i id="soundIcon" class="fa-solid fa-volume-high text-xs sm:text-sm"></i>
+        </button>
+
+        <!-- Tahtayı Çevir -->
+        <button id="flipBoardBtn" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors" title="Tahtayı Döndür">
+          <i class="fa-solid fa-arrows-rotate text-xs sm:text-sm"></i>
+        </button>
+
+        <!-- Yeni Oyun Butonu -->
+        <button id="newGameModalBtn" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-xs sm:text-sm transition-all shadow-md shadow-indigo-600/30 flex items-center space-x-1.5">
+          <i class="fa-solid fa-plus text-xs"></i>
+          <span>Yeni Oyun</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Ana İçerik -->
+  <main class="max-w-7xl mx-auto w-full px-2 sm:px-6 py-4 flex-1 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-6">
+
+    <!-- SOL KOLON: Değerlendirme Çubuğu + Satranç Tahtası + Oyuncu Kartları -->
+    <div class="flex flex-col items-center w-full max-w-[540px]">
+      
+      <!-- Üst Oyuncu Barı (Varsayılan: AI / Siyah) -->
+      <div class="w-full flex items-center justify-between bg-slate-900/90 backdrop-blur px-3.5 py-2.5 rounded-t-xl border border-slate-800">
+        <div class="flex items-center space-x-3">
+          <div class="relative">
+            <div id="topAvatarIcon" class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-rose-400 font-bold shadow-inner">
+              <i class="fa-solid fa-robot"></i>
+            </div>
+            <span id="aiThinkingPulse" class="hidden absolute -top-1 -right-1 flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+            </span>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span id="topPlayerName" class="font-bold text-sm text-slate-200">Nexus Yapay Zeka</span>
+              <span id="aiDiffBadge" class="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-950/70 text-rose-300 border border-rose-800/60">Zor (D3+Q)</span>
+            </div>
+            <div id="aiStatsLine" class="text-[11px] text-slate-400 font-mono">Düşünme: Hazır</div>
+          </div>
+        </div>
+        <!-- Üst Oyuncunun Aldığı Taşlar (Beyaz Taşlar) -->
+        <div id="topCapturedBox" class="flex items-center space-x-0.5 text-slate-300 text-lg font-bold"></div>
+      </div>
+
+      <!-- Tahta + Dikey Değerlendirme Barı Satırı -->
+      <div class="w-full flex items-stretch gap-2.5 my-1.5">
+        
+        <!-- Canlı Değerlendirme Çubuğu (Eval Bar) -->
+        <div class="w-5 sm:w-6 bg-slate-800/90 rounded-lg overflow-hidden flex flex-col justify-between border border-slate-700/80 relative shadow-inner select-none" title="Canlı Tahta Analiz Çubuğu">
+          <!-- Siyah Alanı (Üst) -->
+          <div id="evalBarBlack" class="w-full bg-slate-900 transition-all duration-500 ease-out" style="height: 50%;"></div>
+          <!-- Beyaz Alanı (Alt) -->
+          <div id="evalBarWhite" class="w-full bg-gradient-to-t from-slate-100 to-slate-200 transition-all duration-500 ease-out" style="height: 50%;"></div>
+          <!-- Eval Skor Yazısı -->
+          <div id="evalScoreText" class="absolute inset-x-0 top-1/2 -translate-y-1/2 text-[9px] font-mono font-extrabold text-amber-500 bg-slate-950/80 px-0.5 py-1 text-center border-y border-slate-800 pointer-events-none">
+            0.0
+          </div>
+        </div>
+
+        <!-- İnteraktif Satranç Tahtası -->
+        <div class="flex-1 relative aspect-square w-full rounded-xl overflow-hidden border-4 border-slate-800 shadow-2xl bg-slate-900" id="boardContainer">
+          <div id="chessBoard" class="chess-grid w-full h-full relative"></div>
+        </div>
+
+      </div>
+
+      <!-- Alt Oyuncu Barı (Varsayılan: Oyuncu / Beyaz) -->
+      <div class="w-full flex items-center justify-between bg-slate-900/90 backdrop-blur px-3.5 py-2.5 rounded-b-xl border border-slate-800">
+        <div class="flex items-center space-x-3">
+          <div id="bottomAvatarIcon" class="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-bold shadow-inner">
+            <i class="fa-solid fa-user"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span id="bottomPlayerName" class="font-bold text-sm text-slate-200">Siz</span>
+              <span class="text-[11px] text-slate-400 font-medium" id="bottomColorLabel">(Beyaz)</span>
+            </div>
+            <div id="turnIndicator" class="text-[11px] text-emerald-400 font-semibold flex items-center space-x-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>Hamle Sırası Sizde</span>
+            </div>
+          </div>
+        </div>
+        <!-- Alt Oyuncunun Aldığı Taşlar (Siyah Taşlar) -->
+        <div id="bottomCapturedBox" class="flex items-center space-x-0.5 text-slate-300 text-lg font-bold"></div>
+      </div>
+
     </div>
 
-    <div class="status-box">
-        <div id="status">Sıra sizde (Beyaz)</div>
-        <div class="eval-badge" id="eval">Pozisyon Değeri: 0.00</div>
+    <!-- SAĞ KOLON: Durum Paneli, Zorluk Ayarları, Notasyon Geçmişi, Eylemler -->
+    <div class="w-full lg:w-96 flex flex-col gap-3.5">
+      
+      <!-- Durum Bildirim Kartı -->
+      <div id="statusBarCard" class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between shadow-lg">
+        <div class="flex items-center space-x-3">
+          <div id="statusIconWrap" class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 text-base">
+            <i class="fa-solid fa-play"></i>
+          </div>
+          <div>
+            <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Maç Durumu</div>
+            <div id="gameStatusText" class="font-bold text-sm text-slate-100">Oyun Başladı &bull; Beyaz başlar</div>
+          </div>
+        </div>
+        <div id="evalBadgeText" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 font-mono text-xs font-bold text-slate-300">
+          +0.00
+        </div>
+      </div>
+
+      <!-- Zorluk & Derinlik Seçici -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-lg space-y-2.5">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-gauge-high text-indigo-400"></i>
+            <span>Motor Zorluk Seviyesi</span>
+          </span>
+          <span id="depthLabel" class="text-[11px] font-mono text-indigo-300 bg-indigo-950/80 px-2 py-0.5 rounded border border-indigo-800/60">Derinlik 3</span>
+        </div>
+
+        <div class="grid grid-cols-4 gap-1.5">
+          <button class="diff-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition-all text-center" data-depth="1" data-quiescence="false">
+            <div>Kolay</div>
+            <div class="text-[9px] text-slate-500 font-normal">D:1</div>
+          </button>
+          <button class="diff-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-800 bg-slate-950 text-slate-400 hover:text-white transition-all text-center" data-depth="2" data-quiescence="true">
+            <div>Orta</div>
+            <div class="text-[9px] text-slate-500 font-normal">D:2+Q</div>
+          </button>
+          <button class="diff-btn active px-2 py-2 rounded-lg text-xs font-bold border border-indigo-500 bg-indigo-950/60 text-indigo-300 transition-all text-center" data-depth="3" data-quiescence="true">
+            <div>Zor</div>
+            <div class="text-[9px] text-indigo-400 font-normal">D:3+Q</div>
+          </button>
+          <button class="diff-btn px-2 py-2 rounded-lg text-xs font-bold border border-slate-800 bg-slate-950 text-slate-400 hover:text-rose-400 transition-all text-center" data-depth="4" data-quiescence="true">
+            <div class="text-rose-400 font-extrabold">Usta</div>
+            <div class="text-[9px] text-rose-500/80 font-normal">D:4+Q</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Hamle Notasyon Listesi (PGN) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3.5 shadow-lg flex flex-col h-56">
+        <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+          <span class="text-xs uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-list-ol text-slate-500"></i>
+            <span>Hamle Notasyonu</span>
+          </span>
+          <div class="flex items-center space-x-1">
+            <button id="copyFenBtn" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 transition-colors" title="Mevcut FEN Kodunu Kopyala">
+              <i class="fa-solid fa-code mr-1"></i>FEN
+            </button>
+            <button id="copyPgnBtn" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-[11px] font-medium text-slate-300 transition-colors" title="Tüm PGN Metnini Kopyala">
+              <i class="fa-solid fa-copy mr-1"></i>PGN
+            </button>
+          </div>
+        </div>
+
+        <div id="moveLogContainer" class="flex-1 overflow-y-auto mt-2 font-mono text-xs space-y-1 pr-1">
+          <div class="text-slate-500 italic text-center py-8">Henüz hamle oynanmadı</div>
+        </div>
+      </div>
+
+      <!-- Aksiyon Butonları -->
+      <div class="grid grid-cols-2 gap-2">
+        <button id="undoMoveBtn" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs sm:text-sm font-semibold text-slate-200 transition-all flex items-center justify-center space-x-2">
+          <i class="fa-solid fa-rotate-left text-xs"></i>
+          <span>Hamleyi Geri Al</span>
+        </button>
+        <button id="hintBtn" class="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs sm:text-sm font-semibold text-amber-400 transition-all flex items-center justify-center space-x-2">
+          <i class="fa-regular fa-lightbulb text-xs"></i>
+          <span>İpucu Al</span>
+        </button>
+      </div>
+
     </div>
 
-    <button onclick="restartGame()">Yeni Oyun</button>
+  </main>
 
-    <!-- JS Bağımlılıkları -->
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+  <!-- YENİ OYUN MODAL DİYALOGU -->
+  <div id="newGameModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-base text-slate-100 flex items-center gap-2">
+          <i class="fa-solid fa-chess-board text-indigo-400"></i>
+          <span>Yeni Karşılaşma Ayarları</span>
+        </h3>
+        <button id="closeModalBtn" class="text-slate-400 hover:text-white p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
 
-    <script>
-        var board = null;
-        var game = new Chess();
-        var $status = $('#status');
-        var $eval = $('#eval');
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-2">Hangi renkle oynamak istersiniz?</label>
+          <div class="grid grid-cols-2 gap-2">
+            <button class="side-select-btn active p-3 rounded-xl border border-indigo-500 bg-indigo-950/50 flex flex-col items-center justify-center space-y-1 transition-all" data-color="w">
+              <span class="text-2xl">♔</span>
+              <span class="text-xs font-bold text-white">Beyaz (Önce Başlar)</span>
+            </button>
+            <button class="side-select-btn p-3 rounded-xl border border-slate-800 bg-slate-950/60 hover:border-slate-700 flex flex-col items-center justify-center space-y-1 transition-all" data-color="b">
+              <span class="text-2xl">♚</span>
+              <span class="text-xs font-bold text-slate-300">Siyah (İkinci)</span>
+            </button>
+          </div>
+        </div>
 
-        function onDragStart (source, piece, position, orientation) {
-            if (game.game_over()) return false;
-            // Sadece beyaz taşların oynanmasına izin ver
-            if (piece.search(/^b/) !== -1) return false;
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Motor Bağlantı Tercihi</label>
+          <select id="engineModeSelect" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+            <option value="js" selected>Tarayıcı İçi JS Motoru (İnternetsiz / Sıfır Gecikme)</option>
+            <option value="flask">Yerel Flask Sunucusu (http://127.0.0.1:5000/make_move)</option>
+          </select>
+          <p class="text-[10px] text-slate-500 mt-1">Yerel Python sunucun açıkken `Flask` seçeneğini kullanarak T490'da eğittiğin ağırlıklarla oynayabilirsin.</p>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button id="startNewGameConfirmBtn" class="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-sm text-white transition-all shadow-lg shadow-indigo-600/30">
+          Oyunu Başlat
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BİLDİRİM TOAST MESAJI -->
+  <div id="toastMsg" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-slate-800 border border-slate-700 text-slate-200 px-4 py-2 rounded-xl text-xs font-semibold shadow-2xl opacity-0 pointer-events-none transition-all duration-300 z-50">
+    Bildirim
+  </div>
+
+  <!-- UYGULAMA JAVASCRIPT KODLARI -->
+  <script>
+    /* ==========================================================================
+       1. WEB AUDIO API SES SENTEZLEYİCİSİ (Harici ses dosyalarına gerek yok)
+       ========================================================================== */
+    class AudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      }
+      playMove() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(360, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(120, this.ctx.currentTime + 0.07);
+        gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.07);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.07);
+      }
+      playCapture() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(80, this.ctx.currentTime + 0.12);
+        gain.gain.setValueAtTime(0.35, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.12);
+      }
+      playCheck() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(650, this.ctx.currentTime);
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime + 0.08);
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.22);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.22);
+      }
+      playGameOver() {
+        if (!this.enabled) return;
+        this.init();
+        if (!this.ctx) return;
+        [440, 554, 659, 880].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + idx * 0.09);
+          gain.gain.setValueAtTime(0.2, this.ctx.currentTime + idx * 0.09);
+          gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + idx * 0.09 + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + idx * 0.09);
+          osc.stop(this.ctx.currentTime + idx * 0.09 + 0.3);
+        });
+      }
+    }
+    const audio = new AudioEngine();
+
+    /* ==========================================================================
+       2. SVG TAŞ GRAFİKLERİ (Yüksek Çözünürlüklü Vektörler)
+       ========================================================================== */
+    const PIECE_SVGS = {
+      'wP': '<svg viewBox="0 0 45 45"><path d="m 22.5,9 c -2.21,0 -4,1.79 -4,4 0,0.89 0.29,1.71 0.78,2.38 C 17.33,16.5 16,18.59 16,21 c 0,2.03 0.94,3.84 2.41,5.03 C 15.41,27.09 11,31.58 11,39.5 l 23,0 c 0,-7.92 -4.41,-12.41 -7.41,-13.47 1.47,-1.19 2.41,-3 2.41,-5.03 0,-2.41 -1.33,-4.5 -3.28,-5.62 0.49,-0.67 0.78,-1.49 0.78,-2.38 0,-2.21 -1.79,-4 -4,-4 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>',
+      'wN': '<svg viewBox="0 0 45 45"><path d="m 22,10 c 10.5,1 16.5,8 16,29 L 15,39 C 15,30 12,28 8,24 6.5,22.5 8,18 10.5,16.5 13,15 14,10.5 22,10 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="15" cy="18" r="2" fill="#1e293b"/></svg>',
+      'wB': '<svg viewBox="0 0 45 45"><path d="m 9,36 c 3.39,-0.97 10.11,0.43 13.5,-2 3.39,2.43 10.11,1.03 13.5,2 0,0 1.65,-0.5 3,-2 -1.5,-1.5 -3,-1.5 -3,-1.5 -6,-4 -4,-12 -5,-17 -1,-4 -3.5,-5.5 -8.5,-5.5 -5,0 -7.5,1.5 -8.5,5.5 -1,5 1,13 -5,17 0,0 -1.5,0 -3,1.5 1.35,1.5 3,2 3,2 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="22.5" cy="8" r="2.5" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/></svg>',
+      'wR': '<svg viewBox="0 0 45 45"><path d="m 9,39 27,0 0,-3 -3,-2 0,-16 3,-2 0,-6 -5,0 0,3 -4,0 0,-3 -6,0 0,3 -4,0 0,-3 -5,0 0,6 3,2 0,16 -3,2 0,3 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/></svg>',
+      'wQ': '<svg viewBox="0 0 45 45"><path d="M 9 26 C 17.5 24.5 30 24.5 36 26 L 38 14 L 31 25 L 22.5 11 L 14 25 L 7 14 Z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><path d="M 9,26 C 9,28 10.5,38 12,39 l 21,0 c 1.5,-1 3,-11 3,-13 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="6" cy="12" r="2" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="14" cy="9" r="2" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="22.5" cy="8" r="2" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="31" cy="9" r="2" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><circle cx="39" cy="12" r="2" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/></svg>',
+      'wK': '<svg viewBox="0 0 45 45"><path d="m 22.5,11.63 0,-4.5 M 20.25,9.38 l 4.5,0" stroke="#1e293b" stroke-width="2"/><path d="m 22.5,25 c 0,0 4.5,-7.5 3,-10.5 -1.5,-2.5 -4.5,-2 -6,0 -1.5,3 3,10.5 3,10.5" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/><path d="m 11.5,37 c 5.5,3.5 15.5,3.5 21,0 l 1,-4 c -4,1 -7,0.5 -11,0.5 -4,0 -7,0.5 -11,-0.5 z" fill="#ffffff" stroke="#1e293b" stroke-width="1.5"/></svg>',
+      
+      'bP': '<svg viewBox="0 0 45 45"><path d="m 22.5,9 c -2.21,0 -4,1.79 -4,4 0,0.89 0.29,1.71 0.78,2.38 C 17.33,16.5 16,18.59 16,21 c 0,2.03 0.94,3.84 2.41,5.03 C 15.41,27.09 11,31.58 11,39.5 l 23,0 c 0,-7.92 -4.41,-12.41 -7.41,-13.47 1.47,-1.19 2.41,-3 2.41,-5.03 0,-2.41 -1.33,-4.5 -3.28,-5.62 0.49,-0.67 0.78,-1.49 0.78,-2.38 0,-2.21 -1.79,-4 -4,-4 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/></svg>',
+      'bN': '<svg viewBox="0 0 45 45"><path d="m 22,10 c 10.5,1 16.5,8 16,29 L 15,39 C 15,30 12,28 8,24 6.5,22.5 8,18 10.5,16.5 13,15 14,10.5 22,10 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="15" cy="18" r="2" fill="#ffffff"/></svg>',
+      'bB': '<svg viewBox="0 0 45 45"><path d="m 9,36 c 3.39,-0.97 10.11,0.43 13.5,-2 3.39,2.43 10.11,1.03 13.5,2 0,0 1.65,-0.5 3,-2 -1.5,-1.5 -3,-1.5 -3,-1.5 -6,-4 -4,-12 -5,-17 -1,-4 -3.5,-5.5 -8.5,-5.5 -5,0 -7.5,1.5 -8.5,5.5 -1,5 1,13 -5,17 0,0 -1.5,0 -3,1.5 1.35,1.5 3,2 3,2 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="22.5" cy="8" r="2.5" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/></svg>',
+      'bR': '<svg viewBox="0 0 45 45"><path d="m 9,39 27,0 0,-3 -3,-2 0,-16 3,-2 0,-6 -5,0 0,3 -4,0 0,-3 -6,0 0,3 -4,0 0,-3 -5,0 0,6 3,2 0,16 -3,2 0,3 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/></svg>',
+      'bQ': '<svg viewBox="0 0 45 45"><path d="M 9 26 C 17.5 24.5 30 24.5 36 26 L 38 14 L 31 25 L 22.5 11 L 14 25 L 7 14 Z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><path d="M 9,26 C 9,28 10.5,38 12,39 l 21,0 c 1.5,-1 3,-11 3,-13 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="6" cy="12" r="2" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="14" cy="9" r="2" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="22.5" cy="8" r="2" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="31" cy="9" r="2" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><circle cx="39" cy="12" r="2" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/></svg>',
+      'bK': '<svg viewBox="0 0 45 45"><path d="m 22.5,11.63 0,-4.5 M 20.25,9.38 l 4.5,0" stroke="#f1f5f9" stroke-width="2"/><path d="m 22.5,25 c 0,0 4.5,-7.5 3,-10.5 -1.5,-2.5 -4.5,-2 -6,0 -1.5,3 3,10.5 3,10.5" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/><path d="m 11.5,37 c 5.5,3.5 15.5,3.5 21,0 l 1,-4 c -4,1 -7,0.5 -11,0.5 -4,0 -7,0.5 -11,-0.5 z" fill="#1e293b" stroke="#f1f5f9" stroke-width="1.2"/></svg>'
+    };
+
+    /* ==========================================================================
+       3. GELİŞMİŞ SATRANÇ MOTORU (PST, Alpha-Beta, Sakinlik & MVV-LVA)
+       ========================================================================== */
+    const PIECE_VALUES = {
+      p: 100,
+      n: 320,
+      b: 335,
+      r: 500,
+      q: 920,
+      k: 20000
+    };
+
+    // Konumsal Puan Tabloları (Piece-Square Tables - Beyaz açısı)
+    const PST_TABLES = {
+      p: [
+        [ 0,  0,  0,  0,  0,  0,  0,  0],
+        [50, 50, 50, 50, 50, 50, 50, 50],
+        [10, 10, 20, 30, 30, 20, 10, 10],
+        [ 5,  5, 10, 27, 27, 10,  5,  5],
+        [ 0,  0,  0, 22, 22,  0,  0,  0],
+        [ 5, -5,-10,  0,  0,-10, -5,  5],
+        [ 5, 10, 10,-22,-22, 10, 10,  5],
+        [ 0,  0,  0,  0,  0,  0,  0,  0]
+      ],
+      n: [
+        [-50,-40,-30,-30,-30,-30,-40,-50],
+        [-40,-20,  0,  0,  0,  0,-20,-40],
+        [-30,  0, 10, 15, 15, 10,  0,-30],
+        [-30,  5, 15, 20, 20, 15,  5,-30],
+        [-30,  0, 15, 20, 20, 15,  0,-30],
+        [-30,  5, 10, 15, 15, 10,  5,-30],
+        [-40,-20,  0,  5,  5,  0,-20,-40],
+        [-50,-40,-30,-30,-30,-30,-40,-50]
+      ],
+      b: [
+        [-20,-10,-10,-10,-10,-10,-10,-20],
+        [-10,  0,  0,  0,  0,  0,  0,-10],
+        [-10,  0,  8, 10, 10,  8,  0,-10],
+        [-10,  5,  8, 12, 12,  8,  5,-10],
+        [-10,  0, 12, 12, 12, 12,  0,-10],
+        [-10, 10, 10, 10, 10, 10, 10,-10],
+        [-10,  5,  0,  0,  0,  0,  5,-10],
+        [-20,-10,-10,-10,-10,-10,-10,-20]
+      ],
+      r: [
+        [  0,  0,  0,  0,  0,  0,  0,  0],
+        [  5, 12, 12, 12, 12, 12, 12,  5],
+        [ -5,  0,  0,  0,  0,  0,  0, -5],
+        [ -5,  0,  0,  0,  0,  0,  0, -5],
+        [ -5,  0,  0,  0,  0,  0,  0, -5],
+        [ -5,  0,  0,  0,  0,  0,  0, -5],
+        [ -5,  0,  0,  0,  0,  0,  0, -5],
+        [  0,  0,  0,  5,  5,  0,  0,  0]
+      ],
+      q: [
+        [-20,-10,-10, -5, -5,-10,-10,-20],
+        [-10,  0,  0,  0,  0,  0,  0,-10],
+        [-10,  0,  5,  5,  5,  5,  0,-10],
+        [ -5,  0,  5,  5,  5,  5,  0, -5],
+        [  0,  0,  5,  5,  5,  5,  0, -5],
+        [-10,  5,  5,  5,  5,  5,  0,-10],
+        [-10,  0,  5,  0,  0,  0,  0,-10],
+        [-20,-10,-10, -5, -5,-10,-10,-20]
+      ],
+      k: [
+        [-30,-40,-40,-50,-50,-40,-40,-30],
+        [-30,-40,-40,-50,-50,-40,-40,-30],
+        [-30,-40,-40,-50,-50,-40,-40,-30],
+        [-30,-40,-40,-50,-50,-40,-40,-30],
+        [-20,-30,-30,-40,-40,-30,-30,-20],
+        [-10,-20,-20,-20,-20,-20,-20,-10],
+        [ 20, 20,  0,  0,  0,  0, 20, 20],
+        [ 20, 30, 10,  0,  0, 10, 30, 20]
+      ]
+    };
+
+    class BrowserChessEngine {
+      constructor() {
+        this.nodesEvaluated = 0;
+      }
+
+      evaluatePosition(gameInstance) {
+        if (gameInstance.in_checkmate()) {
+          return gameInstance.turn() === 'w' ? -100000 : 100000;
+        }
+        if (gameInstance.in_draw() || gameInstance.in_threefold_repetition() || gameInstance.insufficient_material()) {
+          return 0;
         }
 
-        function onDrop (source, target) {
-            // Hamle kurallara uygun mu?
-            var move = game.move({
-                from: source,
-                to: target,
-                promotion: 'q'
-            });
+        let score = 0;
+        const board = gameInstance.board();
 
-            if (move === null) return 'snapback';
+        for (let r = 0; r < 8; r++) {
+          for (let c = 0; c < 8; c++) {
+            const piece = board[r][c];
+            if (piece) {
+              const val = PIECE_VALUES[piece.type];
+              // Positional table puanı
+              const pstRow = piece.color === 'w' ? r : (7 - r);
+              const pstCol = piece.color === 'w' ? c : (7 - c);
+              const pstVal = PST_TABLES[piece.type][pstRow][pstCol];
 
-            updateStatus();
-            // Yapay zekanın hamlesini sunucudan iste
-            setTimeout(getAIMove, 250);
-        }
-
-        function onSnapEnd () {
-            board.position(game.fen());
-        }
-
-        function getAIMove() {
-            if (game.game_over()) return;
-
-            $status.html("Yapay zeka düşünüyor...");
-
-            $.ajax({
-                url: '/make_move',
-                type: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({ fen: game.fen() }),
-                success: function(response) {
-                    if (response.ai_move) {
-                        game.load(response.fen);
-                        board.position(game.fen());
-                        $eval.html("Pozisyon Değeri: " + response.evaluation);
-                    }
-                    updateStatus();
-                }
-            });
-        }
-
-        function updateStatus () {
-            var status = '';
-            var moveColor = game.turn() === 'b' ? 'Siyah (AI)' : 'Beyaz (Siz)';
-
-            if (game.in_checkmate()) {
-                status = 'Oyun Bitti: ' + moveColor + ' mat oldu!';
-            } else if (game.in_draw()) {
-                status = 'Oyun Bitti: Beraberlik!';
-            } else {
-                status = 'Sıra: ' + moveColor;
-                if (game.in_check()) {
-                    status += ' (Şah çekildi!)';
-                }
+              if (piece.color === 'w') {
+                score += (val + pstVal);
+              } else {
+                score -= (val + pstVal);
+              }
             }
-            $status.html(status);
+          }
+        }
+        return score;
+      }
+
+      orderMoves(moves, gameInstance) {
+        return moves.sort((a, b) => {
+          let scoreA = 0;
+          let scoreB = 0;
+          // MVV-LVA: Most Valuable Victim - Least Valuable Attacker
+          if (a.captured) {
+            scoreA = (PIECE_VALUES[a.captured] * 10) - PIECE_VALUES[a.piece];
+          }
+          if (b.captured) {
+            scoreB = (PIECE_VALUES[b.captured] * 10) - PIECE_VALUES[b.piece];
+          }
+          if (a.promotion) scoreA += 800;
+          if (b.promotion) scoreB += 800;
+          return scoreB - scoreA;
+        });
+      }
+
+      quiescence(gameInstance, alpha, beta, isMaximizing, qDepth = 3) {
+        this.nodesEvaluated++;
+        const standPat = this.evaluatePosition(gameInstance);
+
+        if (isMaximizing) {
+          if (standPat >= beta) return beta;
+          if (alpha < standPat) alpha = standPat;
+        } else {
+          if (standPat <= alpha) return alpha;
+          if (beta > standPat) beta = standPat;
         }
 
-        function restartGame() {
-            game.reset();
-            board.start();
-            $eval.html("Pozisyon Değeri: 0.00");
-            updateStatus();
+        if (qDepth === 0 || gameInstance.game_over()) {
+          return standPat;
         }
 
-        var config = {
-            draggable: true,
-            position: 'start',
-            onDragStart: onDragStart,
-            onDrop: onDrop,
-            onSnapEnd: onSnapEnd,
-            pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
+        const legalMoves = gameInstance.moves({ verbose: true });
+        // Sadece taş alma hamleleri
+        const captures = this.orderMoves(legalMoves.filter(m => m.captured), gameInstance);
+        if (captures.length === 0) return standPat;
+
+        if (isMaximizing) {
+          for (const move of captures) {
+            gameInstance.move(move);
+            const score = this.quiescence(gameInstance, alpha, beta, false, qDepth - 1);
+            gameInstance.undo();
+            if (score >= beta) return beta;
+            if (score > alpha) alpha = score;
+          }
+          return alpha;
+        } else {
+          for (const move of captures) {
+            gameInstance.move(move);
+            const score = this.quiescence(gameInstance, alpha, beta, true, qDepth - 1);
+            gameInstance.undo();
+            if (score <= alpha) return alpha;
+            if (score < beta) beta = score;
+          }
+          return beta;
+        }
+      }
+
+      minimax(gameInstance, depth, alpha, beta, isMaximizing, useQuiescence = true) {
+        this.nodesEvaluated++;
+
+        if (gameInstance.game_over()) {
+          return { score: this.evaluatePosition(gameInstance), move: null };
+        }
+
+        if (depth === 0) {
+          if (useQuiescence) {
+            const qScore = this.quiescence(gameInstance, alpha, beta, isMaximizing, 3);
+            return { score: qScore, move: null };
+          }
+          return { score: this.evaluatePosition(gameInstance), move: null };
+        }
+
+        let moves = gameInstance.moves({ verbose: true });
+        moves = this.orderMoves(moves, gameInstance);
+
+        let bestMove = moves[0];
+
+        if (isMaximizing) {
+          let maxEval = -Infinity;
+          for (const move of moves) {
+            gameInstance.move(move);
+            const evaluation = this.minimax(gameInstance, depth - 1, alpha, beta, false, useQuiescence);
+            gameInstance.undo();
+
+            if (evaluation.score > maxEval) {
+              maxEval = evaluation.score;
+              bestMove = move;
+            }
+            alpha = Math.max(alpha, evaluation.score);
+            if (beta <= alpha) break; // Beta budaması
+          }
+          return { score: maxEval, move: bestMove };
+        } else {
+          let minEval = Infinity;
+          for (const move of moves) {
+            gameInstance.move(move);
+            const evaluation = this.minimax(gameInstance, depth - 1, alpha, beta, true, useQuiescence);
+            gameInstance.undo();
+
+            if (evaluation.score < minEval) {
+              minEval = evaluation.score;
+              bestMove = move;
+            }
+            beta = Math.min(beta, evaluation.score);
+            if (beta <= alpha) break; // Alpha budaması
+          }
+          return { score: minEval, move: bestMove };
+        }
+      }
+
+      findBestMove(gameInstance, depth = 3, useQuiescence = true) {
+        this.nodesEvaluated = 0;
+        const isWhite = gameInstance.turn() === 'w';
+        const result = this.minimax(gameInstance, depth, -Infinity, Infinity, isWhite, useQuiescence);
+        return {
+          move: result.move,
+          score: result.score,
+          nodes: this.nodesEvaluated
         };
-        board = Chessboard('board', config);
-        updateStatus();
-    </script>
+      }
+    }
+
+    /* ==========================================================================
+       4. UYGULAMA VE ARAYÜZ YÖNETİCİSİ (App State & UI)
+       ========================================================================== */
+    class ChessApp {
+      constructor() {
+        this.game = new Chess();
+        this.engine = new BrowserChessEngine();
+        
+        // Tercihler
+        this.playerColor = 'w'; // Oyuncu rengi
+        this.isFlipped = false;  // Tahta ters mi
+        this.aiDepth = 3;
+        this.useQuiescence = true;
+        this.engineMode = 'js'; // 'js' veya 'flask'
+        this.flaskEndpoint = 'http://127.0.0.1:5000/make_move';
+
+        // Durumlar
+        this.selectedSquare = null;
+        this.legalMoveTargets = [];
+        this.lastMoveSquares = [];
+        this.isAiThinking = false;
+        this.moveHistoryData = [];
+
+        this.initDOM();
+        this.bindEvents();
+        this.renderBoard();
+        this.updateGameUI();
+      }
+
+      initDOM() {
+        this.boardEl = document.getElementById('chessBoard');
+        this.statusTextEl = document.getElementById('gameStatusText');
+        this.evalBadgeEl = document.getElementById('evalBadgeText');
+        this.evalScoreTextEl = document.getElementById('evalScoreText');
+        this.evalBarWhite = document.getElementById('evalBarWhite');
+        this.evalBarBlack = document.getElementById('evalBarBlack');
+        this.moveLogContainer = document.getElementById('moveLogContainer');
+        this.aiThinkingPulse = document.getElementById('aiThinkingPulse');
+        this.aiStatsLine = document.getElementById('aiStatsLine');
+        this.turnIndicator = document.getElementById('turnIndicator');
+        this.soundToggleBtn = document.getElementById('soundToggleBtn');
+        this.soundIcon = document.getElementById('soundIcon');
+        this.engineSourceBtn = document.getElementById('engineSourceBtn');
+        this.engineSourceLabel = document.getElementById('engineSourceLabel');
+        this.topCapturedBox = document.getElementById('topCapturedBox');
+        this.bottomCapturedBox = document.getElementById('bottomCapturedBox');
+        this.depthLabel = document.getElementById('depthLabel');
+        this.aiDiffBadge = document.getElementById('aiDiffBadge');
+        this.toastMsg = document.getElementById('toastMsg');
+      }
+
+      bindEvents() {
+        // Ses Butonu
+        this.soundToggleBtn.addEventListener('click', () => {
+          audio.enabled = !audio.enabled;
+          this.soundIcon.className = audio.enabled ? 'fa-solid fa-volume-high text-xs sm:text-sm' : 'fa-solid fa-volume-xmark text-xs sm:text-sm text-rose-400';
+          this.showToast(audio.enabled ? 'Sesler açıldı' : 'Sesler kapatıldı');
+        });
+
+        // Döndür Butonu
+        document.getElementById('flipBoardBtn').addEventListener('click', () => {
+          this.isFlipped = !this.isFlipped;
+          this.renderBoard();
+          this.showToast('Tahta görünümü çevrildi');
+        });
+
+        // Geri Al Butonu
+        document.getElementById('undoMoveBtn').addEventListener('click', () => {
+          this.undoMove();
+        });
+
+        // İpucu Butonu
+        document.getElementById('hintBtn').addEventListener('click', () => {
+          this.provideHint();
+        });
+
+        // Yeni Oyun Modalı
+        document.getElementById('newGameModalBtn').addEventListener('click', () => {
+          document.getElementById('newGameModal').classList.remove('hidden');
+        });
+        document.getElementById('closeModalBtn').addEventListener('click', () => {
+          document.getElementById('newGameModal').classList.add('hidden');
+        });
+
+        // Modal Renk Seçimi
+        document.querySelectorAll('.side-select-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.side-select-btn').forEach(b => {
+              b.classList.remove('active', 'border-indigo-500', 'bg-indigo-950/50');
+              b.classList.add('border-slate-800', 'bg-slate-950/60');
+            });
+            const target = e.currentTarget;
+            target.classList.add('active', 'border-indigo-500', 'bg-indigo-950/50');
+            target.classList.remove('border-slate-800', 'bg-slate-950/60');
+          });
+        });
+
+        // Modal Başlat Butonu
+        document.getElementById('startNewGameConfirmBtn').addEventListener('click', () => {
+          const activeSideBtn = document.querySelector('.side-select-btn.active');
+          const chosenColor = activeSideBtn ? activeSideBtn.dataset.color : 'w';
+          this.engineMode = document.getElementById('engineModeSelect').value;
+          this.updateEngineSourceBadge();
+
+          this.startNewGame(chosenColor);
+          document.getElementById('newGameModal').classList.add('hidden');
+        });
+
+        // Hızlı Motor Kaynak Butonu
+        this.engineSourceBtn.addEventListener('click', () => {
+          this.engineMode = this.engineMode === 'js' ? 'flask' : 'js';
+          this.updateEngineSourceBadge();
+          this.showToast(this.engineMode === 'flask' ? 'Yerel Flask Sunucu Modu Aktif' : 'Tarayıcı İçi Motor Aktif');
+        });
+
+        // Zorluk Butonları
+        document.querySelectorAll('.diff-btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.diff-btn').forEach(b => {
+              b.classList.remove('active', 'border-indigo-500', 'bg-indigo-950/60', 'text-indigo-300');
+              b.classList.add('border-slate-800', 'bg-slate-950', 'text-slate-400');
+            });
+            const target = e.currentTarget;
+            target.classList.add('active', 'border-indigo-500', 'bg-indigo-950/60', 'text-indigo-300');
+            target.classList.remove('border-slate-800', 'bg-slate-950', 'text-slate-400');
+
+            this.aiDepth = parseInt(target.dataset.depth);
+            this.useQuiescence = target.dataset.quiescence === 'true';
+
+            const names = { 1: 'Kolay (D:1)', 2: 'Orta (D:2+Q)', 3: 'Zor (D:3+Q)', 4: 'Usta (D:4+Q)' };
+            this.depthLabel.innerText = `Derinlik ${this.aiDepth}`;
+            this.aiDiffBadge.innerText = names[this.aiDepth];
+            this.showToast(`Yapay zeka: ${names[this.aiDepth]}`);
+          });
+        });
+
+        // PGN Kopyala
+        document.getElementById('copyPgnBtn').addEventListener('click', () => {
+          const pgn = this.game.pgn() || 'Henüz hamle yok.';
+          this.copyToClipboard(pgn, 'PGN panoya kopyalandı!');
+        });
+
+        // FEN Kopyala
+        document.getElementById('copyFenBtn').addEventListener('click', () => {
+          const fen = this.game.fen();
+          this.copyToClipboard(fen, 'FEN kodu panoya kopyalandı!');
+        });
+      }
+
+      updateEngineSourceBadge() {
+        if (this.engineMode === 'flask') {
+          this.engineSourceLabel.innerText = 'Flask (T490)';
+          this.engineSourceBtn.classList.add('text-amber-400', 'border-amber-500/50');
+        } else {
+          this.engineSourceLabel.innerText = 'Tarayıcı (JS)';
+          this.engineSourceBtn.classList.remove('text-amber-400', 'border-amber-500/50');
+        }
+      }
+
+      showToast(msg) {
+        this.toastMsg.innerText = msg;
+        this.toastMsg.classList.remove('opacity-0');
+        this.toastMsg.classList.add('opacity-100');
+        setTimeout(() => {
+          this.toastMsg.classList.remove('opacity-100');
+          this.toastMsg.classList.add('opacity-0');
+        }, 2200);
+      }
+
+      copyToClipboard(text, successMsg) {
+        const dummy = document.createElement('textarea');
+        document.body.appendChild(dummy);
+        dummy.value = text;
+        dummy.select();
+        document.execCommand('copy');
+        document.body.removeChild(dummy);
+        this.showToast(successMsg);
+      }
+
+      startNewGame(playerColor = 'w') {
+        this.game.reset();
+        this.playerColor = playerColor;
+        this.isFlipped = (playerColor === 'b');
+        this.selectedSquare = null;
+        this.legalMoveTargets = [];
+        this.lastMoveSquares = [];
+        this.moveHistoryData = [];
+        this.isAiThinking = false;
+
+        // İsim ve etiketleri güncelle
+        const bottomColorLabel = document.getElementById('bottomColorLabel');
+        const topPlayerName = document.getElementById('topPlayerName');
+        const bottomPlayerName = document.getElementById('bottomPlayerName');
+
+        if (this.playerColor === 'w') {
+          bottomColorLabel.innerText = '(Beyaz)';
+          bottomPlayerName.innerText = 'Siz';
+          topPlayerName.innerText = 'Nexus AI (Siyah)';
+        } else {
+          bottomColorLabel.innerText = '(Siyah)';
+          bottomPlayerName.innerText = 'Siz';
+          topPlayerName.innerText = 'Nexus AI (Beyaz)';
+        }
+
+        this.renderBoard();
+        this.updateGameUI();
+        this.showToast('Yeni maç başladı!');
+
+        // Eğer AI Beyaz ise ilk hamleyi yapsın
+        if (this.game.turn() !== this.playerColor) {
+          setTimeout(() => this.triggerAiMove(), 450);
+        }
+      }
+
+      renderBoard() {
+        this.boardEl.innerHTML = '';
+        const rows = this.isFlipped ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
+        const cols = this.isFlipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
+
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+        const inCheck = this.game.in_check();
+        let checkSquare = null;
+
+        if (inCheck) {
+          const kingColor = this.game.turn();
+          for (let r = 0; r < 8; r++) {
+            for (let c = 0; c < 8; c++) {
+              const sq = files[c] + (r + 1);
+              const p = this.game.get(sq);
+              if (p && p.type === 'k' && p.color === kingColor) {
+                checkSquare = sq;
+                break;
+              }
+            }
+          }
+        }
+
+        for (let r of rows) {
+          for (let c of cols) {
+            const squareId = files[c] + (r + 1);
+            const isLight = (r + c) % 2 !== 0;
+            const sqDiv = document.createElement('div');
+            sqDiv.className = `relative flex items-center justify-center ${isLight ? 'sq-light' : 'sq-dark'}`;
+            sqDiv.dataset.square = squareId;
+
+            // Koordinat etiketleri
+            if (this.isFlipped) {
+              if (r === 7) {
+                const fLabel = document.createElement('span');
+                fLabel.className = 'absolute bottom-0.5 right-1 text-[9px] font-bold opacity-60 pointer-events-none';
+                fLabel.innerText = files[c];
+                sqDiv.appendChild(fLabel);
+              }
+              if (c === 7) {
+                const rLabel = document.createElement('span');
+                rLabel.className = 'absolute top-0.5 left-1 text-[9px] font-bold opacity-60 pointer-events-none';
+                rLabel.innerText = (r + 1);
+                sqDiv.appendChild(rLabel);
+              }
+            } else {
+              if (r === 0) {
+                const fLabel = document.createElement('span');
+                fLabel.className = 'absolute bottom-0.5 right-1 text-[9px] font-bold opacity-60 pointer-events-none';
+                fLabel.innerText = files[c];
+                sqDiv.appendChild(fLabel);
+              }
+              if (c === 0) {
+                const rLabel = document.createElement('span');
+                rLabel.className = 'absolute top-0.5 left-1 text-[9px] font-bold opacity-60 pointer-events-none';
+                rLabel.innerText = (r + 1);
+                sqDiv.appendChild(rLabel);
+              }
+            }
+
+            // Seçili kare
+            if (this.selectedSquare === squareId) {
+              sqDiv.classList.add('sq-selected');
+            }
+
+            // Son hamle vurgusu
+            if (this.lastMoveSquares.includes(squareId)) {
+              sqDiv.classList.add('sq-last-move');
+            }
+
+            // Şah çekilme vurgusu
+            if (checkSquare === squareId) {
+              sqDiv.classList.add('sq-check');
+            }
+
+            // Taş varsa yerleştir
+            const piece = this.game.get(squareId);
+            if (piece) {
+              const pieceKey = piece.color + piece.type.toUpperCase();
+              const pieceEl = document.createElement('div');
+              pieceEl.className = 'chess-piece flex items-center justify-center';
+              pieceEl.innerHTML = PIECE_SVGS[pieceKey] || '';
+              sqDiv.appendChild(pieceEl);
+            }
+
+            // Hamle ipucu noktaları
+            if (this.legalMoveTargets.includes(squareId)) {
+              const hint = document.createElement('div');
+              if (piece) {
+                hint.className = 'capture-hint-ring absolute';
+              } else {
+                hint.className = 'move-hint-dot absolute';
+              }
+              sqDiv.appendChild(hint);
+            }
+
+            // Tıklama olayı
+            sqDiv.addEventListener('click', () => this.handleSquareClick(squareId));
+
+            this.boardEl.appendChild(sqDiv);
+          }
+        }
+      }
+
+      handleSquareClick(squareId) {
+        if (this.game.game_over() || this.isAiThinking) return;
+        if (this.game.turn() !== this.playerColor) return;
+
+        const pieceAtSquare = this.game.get(squareId);
+
+        // 1. Durum: Önceden bir kare seçilmiş ve hedefe tıklanmışsa (Hamle Yap)
+        if (this.selectedSquare) {
+          const moveAttempt = this.game.move({
+            from: this.selectedSquare,
+            to: squareId,
+            promotion: 'q' // Otomatik vezir terfisi
+          });
+
+          if (moveAttempt) {
+            this.onSuccessfulMove(moveAttempt);
+            return;
+          }
+        }
+
+        // 2. Durum: Kendi taşına tıklandıysa (Seç ve yasal hamleleri göster)
+        if (pieceAtSquare && pieceAtSquare.color === this.playerColor) {
+          this.selectedSquare = squareId;
+          const moves = this.game.moves({ square: squareId, verbose: true });
+          this.legalMoveTargets = moves.map(m => m.to);
+          this.renderBoard();
+          return;
+        }
+
+        // 3. Durum: Boş veya geçersiz kareye tıklandıysa seçimi temizle
+        this.selectedSquare = null;
+        this.legalMoveTargets = [];
+        this.renderBoard();
+      }
+
+      onSuccessfulMove(moveObj) {
+        // Son hamle karelerini güncelle
+        this.lastMoveSquares = [moveObj.from, moveObj.to];
+        this.selectedSquare = null;
+        this.legalMoveTargets = [];
+
+        // Ses efekti
+        if (moveObj.captured) {
+          audio.playCapture();
+        } else {
+          audio.playMove();
+        }
+
+        if (this.game.in_check()) {
+          setTimeout(() => audio.playCheck(), 110);
+        }
+
+        // Notasyonu ekle
+        this.recordMove(moveObj);
+
+        this.renderBoard();
+        this.updateGameUI();
+
+        if (this.game.game_over()) {
+          audio.playGameOver();
+          return;
+        }
+
+        // Sıra AI'da ise yapay zekayı tetikle
+        if (this.game.turn() !== this.playerColor) {
+          setTimeout(() => this.triggerAiMove(), 250);
+        }
+      }
+
+      triggerAiMove() {
+        if (this.game.game_over()) return;
+
+        this.isAiThinking = true;
+        this.aiThinkingPulse.classList.remove('hidden');
+        this.turnIndicator.innerHTML = `
+          <i class="fa-solid fa-circle-notch fa-spin text-rose-400"></i>
+          <span class="text-rose-400">Yapay Zeka Hesaplanıyor...</span>
+        `;
+        this.aiStatsLine.innerText = 'Arama ağacı taranıyor...';
+
+        const startTime = performance.now();
+
+        // Tercih: Yerel Flask Sunucu mu yoksa Dahili JS Motoru mu?
+        if (this.engineMode === 'flask') {
+          this.fetchFlaskMove(startTime);
+        } else {
+          // JS Motoru UI kilitlemesin diye setTimeout ile asenkron işletilir
+          setTimeout(() => {
+            const best = this.engine.findBestMove(this.game, this.aiDepth, this.useQuiescence);
+            const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+
+            this.isAiThinking = false;
+            this.aiThinkingPulse.classList.add('hidden');
+
+            if (best && best.move) {
+              const executedMove = this.game.move(best.move);
+              this.aiStatsLine.innerText = `${duration}s | ${best.nodes.toLocaleString()} düğüm`;
+              this.onSuccessfulMove(executedMove);
+            } else {
+              this.showToast('Hamle bulunamadı!');
+            }
+          }, 35);
+        }
+      }
+
+      fetchFlaskMove(startTime) {
+        fetch(this.flaskEndpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fen: this.game.fen() })
+        })
+        .then(res => {
+          if (!res.ok) throw new Error('Flask sunucusundan cevap alınamadı.');
+          return res.json();
+        })
+        .then(data => {
+          const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+          this.isAiThinking = false;
+          this.aiThinkingPulse.classList.add('hidden');
+
+          if (data.ai_move) {
+            const fromSq = data.ai_move.substring(0, 2);
+            const toSq = data.ai_move.substring(2, 4);
+            const promo = data.ai_move.length > 4 ? data.ai_move[4] : undefined;
+
+            const executed = this.game.move({ from: fromSq, to: toSq, promotion: promo || 'q' });
+            this.aiStatsLine.innerText = `Flask T490 | ${duration}s`;
+            if (executed) this.onSuccessfulMove(executed);
+          }
+        })
+        .catch(err => {
+          console.warn('Flask hatası:', err);
+          this.showToast('Flask bağlantısı koptu! Tarayıcı motoruna geçiliyor...');
+          // Flask başarısız olursa anında JS motoruna devret
+          this.engineMode = 'js';
+          this.updateEngineSourceBadge();
+          const fallback = this.engine.findBestMove(this.game, this.aiDepth, this.useQuiescence);
+          this.isAiThinking = false;
+          this.aiThinkingPulse.classList.add('hidden');
+          if (fallback && fallback.move) {
+            const executed = this.game.move(fallback.move);
+            this.onSuccessfulMove(executed);
+          }
+        });
+      }
+
+      undoMove() {
+        if (this.isAiThinking) return;
+        // Oyuncunun ve AI'ın son hamlesini geri al (2 yarım-hamle)
+        const undo1 = this.game.undo();
+        const undo2 = this.game.undo();
+
+        if (undo1) {
+          this.selectedSquare = null;
+          this.legalMoveTargets = [];
+          this.lastMoveSquares = [];
+          this.moveHistoryData.pop();
+          if (undo2) this.moveHistoryData.pop();
+
+          audio.playMove();
+          this.renderBoard();
+          this.updateGameUI();
+          this.rebuildNotationLog();
+          this.showToast('Hamle geri alındı');
+        }
+      }
+
+      provideHint() {
+        if (this.game.game_over() || this.isAiThinking) return;
+        const best = this.engine.findBestMove(this.game, 3, true);
+        if (best && best.move) {
+          this.selectedSquare = best.move.from;
+          this.legalMoveTargets = [best.move.to];
+          this.renderBoard();
+          this.showToast(`Öneri: ${best.move.san} (${best.move.from} ➔ ${best.move.to})`);
+        }
+      }
+
+      recordMove(moveObj) {
+        this.moveHistoryData.push(moveObj);
+        this.rebuildNotationLog();
+      }
+
+      rebuildNotationLog() {
+        if (this.moveHistoryData.length === 0) {
+          this.moveLogContainer.innerHTML = '<div class="text-slate-500 italic text-center py-8">Henüz hamle oynanmadı</div>';
+          return;
+        }
+
+        let html = '';
+        for (let i = 0; i < this.moveHistoryData.length; i += 2) {
+          const moveNum = Math.floor(i / 2) + 1;
+          const whiteMove = this.moveHistoryData[i] ? this.moveHistoryData[i].san : '';
+          const blackMove = this.moveHistoryData[i + 1] ? this.moveHistoryData[i + 1].san : '';
+
+          html += `
+            <div class="flex items-center justify-between py-1 px-2 rounded hover:bg-slate-800/60 transition-colors">
+              <span class="text-slate-500 w-8 font-bold">${moveNum}.</span>
+              <span class="text-slate-200 flex-1 font-semibold">${whiteMove}</span>
+              <span class="text-slate-400 flex-1 font-semibold">${blackMove}</span>
+            </div>
+          `;
+        }
+        this.moveLogContainer.innerHTML = html;
+        this.moveLogContainer.scrollTop = this.moveLogContainer.scrollHeight;
+      }
+
+      updateGameUI() {
+        // Durum Metinleri
+        if (this.game.in_checkmate()) {
+          const winner = this.game.turn() === 'w' ? 'Siyah' : 'Beyaz';
+          this.statusTextEl.innerText = `ŞAH MAT! ${winner} Kazandı!`;
+          this.statusTextEl.className = 'font-bold text-sm text-rose-400';
+          this.turnIndicator.innerHTML = '<span class="text-rose-400 font-bold">Oyun Sona Erdi</span>';
+        } else if (this.game.in_draw()) {
+          this.statusTextEl.innerText = 'BERABERE! (Pat veya Yetersiz Taş)';
+          this.statusTextEl.className = 'font-bold text-sm text-amber-400';
+          this.turnIndicator.innerHTML = '<span class="text-amber-400 font-bold">Beraberlik</span>';
+        } else if (this.game.in_check()) {
+          const side = this.game.turn() === 'w' ? 'Beyaz' : 'Siyah';
+          this.statusTextEl.innerText = `DİKKAT: ${side} Şah Tehdidi Altında!`;
+          this.statusTextEl.className = 'font-bold text-sm text-rose-400';
+        } else {
+          const turnSide = this.game.turn() === 'w' ? 'Beyaz' : 'Siyah';
+          this.statusTextEl.innerText = `Sıra: ${turnSide}`;
+          this.statusTextEl.className = 'font-bold text-sm text-slate-100';
+        }
+
+        // Sıra bildirim ikonu
+        if (!this.game.game_over()) {
+          if (this.game.turn() === this.playerColor) {
+            this.turnIndicator.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span class="text-emerald-400">Hamle Sırası Sizde</span>
+            `;
+          } else {
+            this.turnIndicator.innerHTML = `
+              <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+              <span class="text-rose-400">Yapay Zeka Sırası</span>
+            `;
+          }
+        }
+
+        // Tahta Değerlendirme Hesabı & Bar Güncellemesi
+        this.updateEvaluationBar();
+
+        // Alınan Taşlar Hesabı
+        this.updateCapturedPieces();
+      }
+
+      updateEvaluationBar() {
+        const rawScore = this.engine.evaluatePosition(this.game);
+        // Pawns cinsine dönüştür (Centipawns / 100)
+        let evalPawn = (rawScore / 100).toFixed(1);
+        if (rawScore > 0) evalPawn = '+' + evalPawn;
+
+        this.evalBadgeEl.innerText = `${evalPawn}`;
+        this.evalScoreTextEl.innerText = `${evalPawn}`;
+
+        // Bar oran hesabı (Sigmoid benzeri aralık [-10, +10] -> [5%, 95%])
+        const clamped = Math.max(-1000, Math.min(1000, rawScore));
+        const whitePercent = 50 + (clamped / 20);
+        const finalWhite = Math.max(6, Math.min(94, whitePercent));
+        const finalBlack = 100 - finalWhite;
+
+        this.evalBarWhite.style.height = `${finalWhite}%`;
+        this.evalBarBlack.style.height = `${finalBlack}%`;
+      }
+
+      updateCapturedPieces() {
+        const history = this.game.history({ verbose: true });
+        const capturedByWhite = [];
+        const capturedByBlack = [];
+
+        history.forEach(m => {
+          if (m.captured) {
+            if (m.color === 'w') {
+              capturedByWhite.push(m.captured);
+            } else {
+              capturedByBlack.push(m.captured);
+            }
+          }
+        });
+
+        const pieceIcons = {
+          p: '♟', n: '♞', b: '♝', r: '♜', q: '♛'
+        };
+
+        const renderTally = (list) => {
+          return list.map(p => `<span class="opacity-80">${pieceIcons[p] || ''}</span>`).join('');
+        };
+
+        if (this.playerColor === 'w') {
+          this.bottomCapturedBox.innerHTML = renderTally(capturedByWhite);
+          this.topCapturedBox.innerHTML = renderTally(capturedByBlack);
+        } else {
+          this.bottomCapturedBox.innerHTML = renderTally(capturedByBlack);
+          this.topCapturedBox.innerHTML = renderTally(capturedByWhite);
+        }
+      }
+    }
+
+    // Uygulamayı Başlat
+    window.addEventListener('DOMContentLoaded', () => {
+      window.chessApp = new ChessApp();
+    });
+  </script>
 </body>
 </html>
